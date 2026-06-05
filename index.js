@@ -5,14 +5,14 @@ const port = process.env.PORT || 10000;
 
 // Serwer HTTP dla Rendera
 app.get('/', (req, res) => {
-  res.send('Bot Husaria działa z systemem anty-spam!');
+  res.send('Bot Husaria daje przerwy za spam!');
 });
 
 app.listen(port, () => {
   console.log(`[SYSTEM] Serwer HTTP nasłuchuje na porcie ${port}`);
 });
 
-// Włączamy intencje wiadomości, aby bot mógł wykrywać spam
+// Włączamy potrzebne intencje
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -28,24 +28,26 @@ const BYPASS_ROLE_ID = '1512577411315663038';
 const userLog = new Map();
 
 client.once('ready', () => {
-  console.log(`[SUKCES] Zalogowano jako ${client.user.tag}! Anty-spam aktywny.`);
+  console.log(`[SUKCES] Zalogowano jako ${client.user.tag}! System przerw za spam aktywny.`);
 });
 
 client.on('messageCreate', async (message) => {
-  // Ignoruj wiadomości od innych botów oraz wiadomości prywatne (DM)
+  // Ignoruj wiadomości od innych botów oraz wiadomości prywatne
   if (message.author.bot || !message.guild) return;
 
   // Sprawdzamy, czy użytkownik ma rangę, która omija anty-spam
   if (message.member && message.member.roles.cache.has(BYPASS_ROLE_ID)) {
-    return; // Osoba z tą rangą może spamować
+    return;
   }
 
   const userId = message.author.id;
   const now = Date.now();
   
-  // Konfiguracja anty-spamu: max 3 wiadomości w 4 sekundy
+  // Konfiguracja spamu: max 3 wiadomości w 4 sekundy
   const LIMIT = 3;
   const TIME_WINDOW = 4000; 
+  // Czas trwania przerwy w milisekundach (5 minut = 300 000 ms)
+  const TIMEOUT_DURATION = 5 * 60 * 1000;
 
   if (!userLog.has(userId)) {
     userLog.set(userId, []);
@@ -53,25 +55,33 @@ client.on('messageCreate', async (message) => {
 
   const timestamps = userLog.get(userId);
   
-  // Usuwamy stare wpisy spoza okna czasowego (starsze niż 4 sekundy)
+  // Usuwamy stare wpisy
   while (timestamps.length > 0 && now - timestamps[0] > TIME_WINDOW) {
     timestamps.shift();
   }
 
-  // Dodajemy obecną wiadomość do historii użytkownika
   timestamps.push(now);
 
-  // Jeśli użytkownik przekroczył limit wiadomości w danym czasie
+  // Jeśli użytkownik przekroczył limit wiadomości
   if (timestamps.length > LIMIT) {
     try {
-      // Usuwamy spamerską wiadomość
-      await message.delete();
-      
-      // Wysyłamy ostrzeżenie, które samo zniknie po 5 sekundach, żeby nie śmiecić
-      const warning = await message.channel.send(`⚠️ **<@${userId}>, nie spamuj!** Twój wolny czas pisania został przekroczony.`);
-      setTimeout(() => warning.delete().catch(() => {}), 5000);
+      // 1. Usuwamy ostatnią wiadomość, która przelała szalę goryczy
+      await message.delete().catch(() => {});
+
+      // 2. Nakładamy przerwę (Timeout) na 5 minut
+      if (message.member && message.member.moderatable) {
+        await message.member.timeout(TIMEOUT_DURATION, 'Spamowanie na czacie');
+        
+        // 3. Informujemy o tym na czacie (wiadomość zniknie po 7 sekundach)
+        const warning = await message.channel.send(`⛔ <@${userId}> otrzymał przerwę na **5 minut** za spamowanie!`);
+        setTimeout(() => warning.delete().catch(() => {}), 7000);
+      } else {
+        // Jeśli bot nie może go wyciszyć (np. to właściciel serwera albo inna rola wyżej bota)
+        const warning = await message.channel.send(`⚠️ <@${userId}> spami, ale nie mogę nałożyć na niego przerwy (brak uprawnień/zbyt wysoka rola).`);
+        setTimeout(() => warning.delete().catch(() => {}), 7000);
+      }
     } catch (error) {
-      console.log(`[BŁĄD] Nie udało się usunąć wiadomości: ${error.message}`);
+      console.log(`[BŁĄD] Problem z ukaraniem użytkownika: ${error.message}`);
     }
   }
 });
