@@ -1,9 +1,9 @@
-const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, PermissionFlagsBits, AttachmentBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, PermissionFlagsBits, AttachmentBuilder, REST, Routes, SlashCommandBuilder } = require('discord.js');
 const express = require('express');
 const app = express();
 const port = process.env.PORT || 10000;
 
-app.get('/', (req, res) => { res.send('Bot Husaria z profesjonalnymi ticketami!'); });
+app.get('/', (req, res) => { res.send('Bot Husaria z komendą /transfer i ticketami!'); });
 app.listen(port, () => { console.log(`[SYSTEM] Serwer HTTP nasłuchuje na porcie ${port}`); });
 
 const client = new Client({
@@ -14,15 +14,45 @@ const client = new Client({
   ]
 });
 
-// --- KONFIGURACJA ---
+// --- KONFIGURACJA ID ---
 const BYPASS_ROLE_ID = '1512577411315663038'; // Ranga omijająca anty-spam
 const TICKET_CHANNEL_ID = '1512574570903900253'; // Kanał z panelem ticketów
 const SUPPORT_ROLE_ID = '1512580895385849998'; // Ranga wsparcia
+const TRANSFER_ALLOWED_ROLE_ID = '1512587126506655774'; // Ranga, która może użyć /transfer
 
 const userLog = new Map();
+const ticketCreators = new Map();
 
+// --- REJESTRACJA KOMENDY SLASH (/transfer) ---
 client.once('ready', async () => {
   console.log(`[SUKCES] Zaawansowany bot ticketowy gotowy do akcji!`);
+  
+  // Definiujemy naszą komendę slash
+  const commands = [
+    new SlashCommandBuilder()
+      .setName('transfer')
+      .setDescription('Ogłoś oficjalny transfer państwa do Husarii')
+      .addStringOption(option => 
+        option.setName('panstwo')
+          .setDescription('Wpisz nazwę państwa, które do nas dołącza')
+          .setRequired(true)
+      )
+  ].map(command => command.toJSON());
+
+  const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+
+  try {
+    console.log('[SYSTEM] Rozpoczynanie odświeżania komend aplikacji (/)');
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: commands },
+    );
+    console.log('[SYSTEM] Pomyślnie zarejestrowano komendy aplikacji (/)');
+  } catch (error) {
+    console.error(`[BŁĄD REJESTRACJI KOMEND]: ${error.message}`);
+  }
+
+  // Automatyczny panel ticketów (jeśli nie istnieje)
   try {
     const channel = await client.channels.fetch(TICKET_CHANNEL_ID);
     if (channel) {
@@ -48,13 +78,46 @@ client.once('ready', async () => {
   } catch (error) { console.log(`[BŁĄD PANELU]: ${error.message}`); }
 });
 
-// --- REJESTRATOR AKTYWNOŚCI DLA TRANSKRYPCJI ---
-// Zapisujemy ID twórcy danego kanału (żeby wiedzieć komu wysłać DM po zamknięciu)
-const ticketCreators = new Map();
-
+// --- OBSŁUGA INTERAKCJI (KOMENDY, PRZYCISKI, MENU) ---
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.guild) return;
 
+  // ==================== OBSŁUGA KOMENDY /transfer ====================
+  if (interaction.isChatInputCommand() && interaction.customId === undefined) {
+    if (interaction.commandName === 'transfer') {
+      
+      // Sprawdzanie permisji roli: tylko rola 1512587126506655774 może tego użyć
+      if (!interaction.member.roles.cache.has(TRANSFER_ALLOWED_ROLE_ID)) {
+        return interaction.reply({ 
+          content: '❌ Nie masz uprawnień do używania tej komendy! Wymagana jest specjalna ranga zarządcza.', 
+          ephemeral: true 
+        });
+      }
+
+      const panstwo = interaction.options.getString('panstwo');
+
+      // Tworzymy przepiękny, estetyczny Embed ogłoszeniowy o transferze
+      const transferEmbed = new EmbedBuilder()
+        .setColor('#FF0055') // Bojowy, husarski czerwono-różowy kolor
+        .setTitle('✈️ OFICJALNY TRANSFER PAŃSTWA ✈️')
+        .setDescription(`Z wielką dumą ogłaszamy, że pod skrzydła potężnej **Husarii** oficjalnie przechodzi nowe terytorium!`)
+        .addFields(
+          { name: '🌍 Dołączające Państwo', value: `👑 **${panstwo}**`, inline: false },
+          { name: '🛡️ Nowy Sojusznik / Poddany', value: `➡️ Wcielone do struktur **HUSARIA**`, inline: false },
+          { name: '📈 Status transferu', value: `🟩 **ZAKOŃCZONY POMYŚLNIE**`, inline: true }
+        )
+        .setImage('https://i.imgur.com/vHqLg0H.png') // Możesz tu podmienić link do grafiki Husarii, jeśli jakąś masz!
+        .setTimestamp()
+        .setFooter({ text: `Ogłoszone przez: ${interaction.user.username}`, iconURL: interaction.user.displayAvatarURL() });
+
+      // Odpowiadamy w sposób ukryty dla świata (ephemeral), co sprawia, że komenda "znika" dla innych,
+      // a na kanale wysyłamy czyste, piękne ogłoszenie jako zwykłą wiadomość bota.
+      await interaction.reply({ content: 'Wysyłanie ogłoszenia o transferze...', ephemeral: true });
+      await interaction.channel.send({ embeds: [transferEmbed] });
+    }
+  }
+
+  // ==================== OBSŁUGA TICKETÓW ====================
   // 1. Kliknięcie "Stwórz zgłoszenie" -> Menu wyboru powodu
   if (interaction.isButton() && interaction.customId === 'start_ticket') {
     const selectMenu = new StringSelectMenuBuilder()
@@ -79,8 +142,8 @@ client.on('interactionCreate', async (interaction) => {
     try {
       const ticketChannel = await interaction.guild.channels.create({
         name: channelName,
-        type: 0, // GuildText
-        parent: null, // BRAK kategorii wymusza stworzenie kanału na samym dole listy!
+        type: 0,
+        parent: null, // Na samym dole listy
         permissionOverwrites: [
           { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
           { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
@@ -88,7 +151,6 @@ client.on('interactionCreate', async (interaction) => {
         ]
       });
 
-      // Zapisujemy, kto stworzył ten kanał
       ticketCreators.set(ticketChannel.id, interaction.user.id);
 
       const insideEmbed = new EmbedBuilder()
@@ -110,7 +172,7 @@ client.on('interactionCreate', async (interaction) => {
     } catch (err) { console.log(`[BŁĄD TWORZENIA]: ${err.message}`); }
   }
 
-  // 3. Kliknięcie "Zamknij ticket" -> Wybór powodu zamknięcia (Nowość!)
+  // 3. Kliknięcie "Zamknij ticket" -> Wybór powodu zamknięcia
   if (interaction.isButton() && interaction.customId === 'close_ticket_request') {
     const reasonMenu = new StringSelectMenuBuilder()
       .setCustomId('select_close_reason')
@@ -125,19 +187,15 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.reply({ content: 'Wybierz oficjalny powód zamknięcia tego zgłoszenia:', components: [row] });
   }
 
-  // 4. Wybranie powodu zamknięcia -> Generowanie transkrypcji, wysłanie DM i usunięcie kanału
+  // 4. Wybranie powodu zamknięcia -> Transkrypcja, wysłanie DM i usunięcie kanału
   if (interaction.isStringSelectMenu() && interaction.customId === 'select_close_reason') {
     const closeReason = interaction.values[0];
     const channel = interaction.channel;
-    
     await interaction.reply('🔒 *Generowanie transkrypcji i zamykanie kanału (5 sekund)...*');
 
     try {
-      // Pobieramy historię wiadomości z ticketa (max 100 ostatnich wiadomości)
       const fetchedMessages = await channel.messages.fetch({ limit: 100 });
       let transcriptText = `--- TRANSKRYPCJA ZGŁOSZENIA: ${channel.name} ---\n\n`;
-      
-      // Układamy wiadomości od najstarszej do najnowszej
       const sortedMessages = fetchedMessages.reverse();
       sortedMessages.forEach(msg => {
         if (!msg.author.bot) {
@@ -146,15 +204,12 @@ client.on('interactionCreate', async (interaction) => {
         }
       });
 
-      // Tworzymy plik .txt w pamięci bota
       const buffer = Buffer.from(transcriptText, 'utf-8');
       const attachment = new AttachmentBuilder(buffer, { name: `transcript-${channel.id}.txt` });
 
-      // Szukamy kto był autorem zgłoszenia
       const creatorId = ticketCreators.get(channel.id) || interaction.user.id;
       const creator = await client.users.fetch(creatorId).catch(() => null);
 
-      // Tworzymy ładny embed z podsumowaniem identyczny jak na Twoim zdjęciu!
       const closeEmbed = new EmbedBuilder()
         .setColor('#FAA61A')
         .setTitle('📥 TWÓJ TICKET ZOSTAŁ ZAMKNIĘTY')
@@ -166,22 +221,15 @@ client.on('interactionCreate', async (interaction) => {
         )
         .setFooter({ text: 'Husaria Bot • Centrum Pomocy' });
 
-      // Wysyłamy plik i embed na PW (DM) do osoby, która stworzyła ticket
       if (creator) {
-        await creator.send({ embeds: [closeEmbed], files: [attachment] }).catch(() => {
-          console.log(`[INFO] Nie udało się wysłać DM do ${creator.tag} (ma zablokowane PW).`);
-        });
+        await creator.send({ embeds: [closeEmbed], files: [attachment] }).catch(() => {});
       }
 
-      // Czyścimy pamięć bota i usuwamy kanał po 5 sekundach
       setTimeout(async () => {
         ticketCreators.delete(channel.id);
         await channel.delete().catch(() => {});
       }, 5000);
-
-    } catch (err) {
-      console.log(`[BŁĄD ZAMYKANIA]: ${err.message}`);
-    }
+    } catch (err) { console.log(`[BŁĄD ZAMYKANIA]: ${err.message}`); }
   }
 });
 
