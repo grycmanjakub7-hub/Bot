@@ -43,3 +43,5 @@ client.on('messageCreate', (message) => {
     }
 });
 
+// Ta linijka ODPALA bota i pobiera token z Rendera!
+client.login(process.env.DISCORD_TOKEN);
