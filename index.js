@@ -43,5 +43,3 @@ client.on('messageCreate', (message) => {
     }
 });
 
-// TUTAJ WKLEIŁEM TWÓJ TOKEN BEZPOŚREDNIO JAKO TEKST
-client.login('MTQ5MjYzNDI3NTYzODY3NzU2NA.GQBQCH.Nehr0JHzuV8D-TL_GcuLyYMzMnAdkMsJSnpeiI');
