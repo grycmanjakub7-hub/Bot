@@ -1,6 +1,6 @@
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, PermissionFlagsBits, AttachmentBuilder, REST, Routes, SlashCommandBuilder } = require('discord.js');
 const express = require('express');
-const axios = require('axios'); // Nowa biblioteka do pingowania
+const axios = require('axios');
 const app = express();
 const port = process.env.PORT || 10000;
 
@@ -10,14 +10,23 @@ app.listen(port, () => {
   
   // ANTY-ZASYPIACZ: Pinguj bota co 5 minut (300000 ms)
   setInterval(() => {
-    const url = `https://${process.env.RENDER_EXTERNAL_HOSTNAME}.onrender.com`;
     if (process.env.RENDER_EXTERNAL_HOSTNAME) {
+      const url = `https://${process.env.RENDER_EXTERNAL_HOSTNAME}.onrender.com`;
       axios.get(url)
         .then(() => console.log('[ANTY-SLEEP] Bot pomyślnie szturchnięty, nie zasypiam!'))
         .catch((err) => console.log('[ANTY-SLEEP] Błąd pingu: ' + err.message));
     }
   }, 300000);
+});
 
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers 
+  ]
+});
 
 // --- KONFIGURACJA ID ---
 const BYPASS_ROLE_ID = '1512577411315663038'; // Ranga omijająca anty-spam
@@ -25,20 +34,18 @@ const TICKET_CHANNEL_ID = '1512574570903900253'; // Kanał z panelem ticketów
 const SUPPORT_ROLE_ID = '1512580895385849998'; // Ranga wsparcia
 const TRANSFER_ALLOWED_ROLE_ID = '1512587126506655774'; // Ranga do /transfer
 const WELCOME_CHANNEL_ID = '1512410099518410782'; // Kanał powitań
-
-// NOWE REJESTRY ID WERYFIKACJI
 const VERIFY_CHANNEL_ID = '1512591912450920558'; // Kanał, gdzie stoi panel weryfikacji
 const AUTOROLE_ON_JOIN_ID = '1512592026900627487'; // Ranga nadawana OD RAZU po wejściu
 const VERIFIED_ROLE_ID = '1512580404974981120'; // Ranga otrzymywana PO WERYFIKACJI
 
 const userLog = new Map();
 const ticketCreators = new Map();
+const verificationSessions = new Map();
 
 // --- START BOTA I GENEROWANIE PANELU WERYFIKACJI ---
 client.once('ready', async () => {
   console.log(`[SUKCES] Zaawansowany bot Husaria gotowy do akcji!`);
   
-  // Rejestracja komendy /transfer
   const commands = [
     new SlashCommandBuilder()
       .setName('transfer')
@@ -68,7 +75,7 @@ client.once('ready', async () => {
     }
   } catch (e) { console.log(e); }
 
-  // AUTOMATYCZNY PANEL WERYFIKACJI
+  // Panel weryfikacji
   try {
     const vChannel = await client.channels.fetch(VERIFY_CHANNEL_ID);
     if (vChannel) {
@@ -80,30 +87,21 @@ client.once('ready', async () => {
           .setDescription('Aby uzyskać pełny dostęp do serwera **Husaria** i dowieść, że nie jesteś robotem, kliknij poniższy przycisk i rozwiąż proste zadanie.');
         
         const vRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId('trigger_verify')
-            .setLabel('Zweryfikuj się')
-            .setEmoji('✅')
-            .setStyle(ButtonStyle.Success)
+          new ButtonBuilder().setCustomId('trigger_verify').setLabel('Zweryfikuj się').setEmoji('✅').setStyle(ButtonStyle.Success)
         );
         await vChannel.send({ embeds: [vEmbed], components: [vRow] });
         console.log('[WERYFIKACJA] Panel weryfikacyjny został wysłany.');
       }
     }
-  } catch (e) { console.log(`[BŁĄD PANELU WERYFIKACJI]: ${e.message}`); }
+  } catch (e) { console.log(e); }
 });
 
 // --- AUTOMATYCZNA RANGA PRZY DOŁĄCZENIU + EMISJA POWITANIA ---
 client.on('guildMemberAdd', async (member) => {
   try {
-    // 1. Z automatu dajemy rangę startową
     const startRole = member.guild.roles.cache.get(AUTOROLE_ON_JOIN_ID);
-    if (startRole) {
-      await member.roles.add(startRole);
-      console.log(`[AUTOROLE] Nadano rangę początkową użytkownikowi ${member.user.tag}`);
-    }
+    if (startRole) await member.roles.add(startRole);
 
-    // 2. Wysyłamy estetyczne powitanie
     const channel = await member.guild.channels.fetch(WELCOME_CHANNEL_ID);
     if (channel) {
       const welcomeEmbed = new EmbedBuilder()
@@ -115,91 +113,66 @@ client.on('guildMemberAdd', async (member) => {
         .setTimestamp();
       await channel.send({ content: `Witaj <@${member.id}>! ⚔️`, embeds: [welcomeEmbed] });
     }
-  } catch (error) { console.log(`[BŁĄD DOŁĄCZENIA]: ${error.message}`); }
+  } catch (error) { console.log(error); }
 });
 
-// --- PAMIĘĆ DLA ZADAŃ MATEMATYCZNYCH ---
-const verificationSessions = new Map();
-
-// --- OBSŁUGA INTERAKCJI (WERYFIKACJA, TICKETY, /TRANSFER) ---
+// --- OBSŁUGA INTERAKCJI ---
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.guild) return;
 
-  // 1. Kliknięcie "Zweryfikuj się" -> Generowanie losowego zadania
+  // Przycisk "Zweryfikuj się"
   if (interaction.isButton() && interaction.customId === 'trigger_verify') {
-    // Sprawdzamy czy użytkownik przypadkiem nie ma już rangi zweryfikowanego
     if (interaction.member.roles.cache.has(VERIFIED_ROLE_ID)) {
-      return interaction.reply({ content: '✅ Jesteś już pomyślnie zweryfikowany na tym serwerze!', ephemeral: true });
+      return interaction.reply({ content: '✅ Jesteś już pomyślnie zweryfikowany!', ephemeral: true });
     }
 
-    // Losujemy liczby od 1 do 10
     const num1 = Math.floor(Math.random() * 9) + 1;
     const num2 = Math.floor(Math.random() * 9) + 1;
     const isPlus = Math.random() > 0.5;
-    
     const correctAnswer = isPlus ? (num1 + num2) : (num1 - num2);
-    const questionString = `Ile to jest: **${num1} ${isPlus ? '+' : '-'} ${num2}**?`;
-
-    // Generujemy błędne odpowiedzi, dbając by się nie powtarzały
+    
     const answers = new Set([correctAnswer]);
-    while (answers.size < 4) {
-      answers.add(correctAnswer + (Math.floor(Math.random() * 7) - 3));
-    }
+    while (answers.size < 4) { answers.add(correctAnswer + (Math.floor(Math.random() * 7) - 3)); }
     const shuffledAnswers = Array.from(answers).sort((a, b) => a - b);
 
-    // Zapisujemy poprawną odpowiedź dla tego użytkownika
     verificationSessions.set(interaction.user.id, correctAnswer);
 
-    // Tworzymy menu wyboru odpowiedzi
-    const selectMenu = new StringSelectMenuBuilder()
-      .setCustomId('submit_verify_answer')
-      .setPlaceholder('Wybierz poprawny wynik...');
-
-    shuffledAnswers.forEach(ans => {
-      selectMenu.addOptions({ label: `Wynik: ${ans}`, value: ans.toString() });
-    });
-
-    const row = new ActionRowBuilder().addComponents(selectMenu);
+    const selectMenu = new StringSelectMenuBuilder().setCustomId('submit_verify_answer').setPlaceholder('Wybierz poprawny wynik...');
+    shuffledAnswers.forEach(ans => { selectMenu.addOptions({ label: `Wynik: ${ans}`, value: ans.toString() }); });
 
     await interaction.reply({
-      content: `🔒 **Zadanie weryfikacyjne:**\nRozwiąż to proste równanie, aby odblokować serwer:\n\n${questionString}`,
-      components: [row],
+      content: `🔒 **Zadanie weryfikacyjne:**\nIle to jest: **${num1} ${isPlus ? '+' : '-'} ${num2}**?`,
+      components: [new ActionRowBuilder().addComponents(selectMenu)],
       ephemeral: true
     });
   }
 
-  // 2. Sprawdzenie wybranej odpowiedzi z menu weryfikacji
+  // Odpowiedź w menu weryfikacji
   if (interaction.isStringSelectMenu() && interaction.customId === 'submit_verify_answer') {
     const userAnswer = parseInt(interaction.values[0]);
     const correctAnswer = verificationSessions.get(interaction.user.id);
 
-    if (correctAnswer === undefined) {
-      return interaction.reply({ content: '❌ Coś poszło nie tak. Kliknij przycisk weryfikacji ponownie.', ephemeral: true });
-    }
+    if (correctAnswer === undefined) return interaction.reply({ content: '❌ Kliknij przycisk ponownie.', ephemeral: true });
 
     if (userAnswer === correctAnswer) {
       try {
-        // Usuwamy sesję z pamięci bota
         verificationSessions.delete(interaction.user.id);
-
-        // Nadajemy rangę zweryfikowanego i usuwamy niezweryfikowanego
         const unverifiedRole = interaction.guild.roles.cache.get(AUTOROLE_ON_JOIN_ID);
         const verifiedRole = interaction.guild.roles.cache.get(VERIFIED_ROLE_ID);
 
         if (unverifiedRole) await interaction.member.roles.remove(unverifiedRole);
         if (verifiedRole) await interaction.member.roles.add(verifiedRole);
 
-        await interaction.update({ content: '🎉 **Weryfikacja zakończona sukcesem!** Witamy na pełnej wersji serwera Husaria. Uzyskałeś dostęp do kanałów.', components: [], ephemeral: true });
+        await interaction.update({ content: '🎉 **Weryfikacja pomyślna!** Witamy na serwerze Husaria.', components: [], ephemeral: true });
       } catch (err) {
-        console.log(err);
-        await interaction.reply({ content: '❌ Bot napotkał problem z rangami. Upewnij się, że rola bota jest nad rangami weryfikacyjnymi.', ephemeral: true });
+        await interaction.reply({ content: '❌ Błąd przydzielania ról. Przesuń rolę bota wyżej w ustawieniach Discorda.', ephemeral: true });
       }
     } else {
-      await interaction.update({ content: '❌ **Błędna odpowiedź!** Spróbuj ponownie klikając zielony przycisk na kanale.', components: [], ephemeral: true });
+      await interaction.update({ content: '❌ **Błędna odpowiedź!** Spróbuj ponownie klikając zielony przycisk.', components: [], ephemeral: true });
     }
   }
 
-  // ==================== POZOSTAŁY KOD (/TRANSFER I TICKETY) ====================
+  // Komenda /transfer
   if (interaction.isChatInputCommand() && interaction.customId === undefined) {
     if (interaction.commandName === 'transfer') {
       if (!interaction.member.roles.cache.has(TRANSFER_ALLOWED_ROLE_ID)) {
@@ -222,14 +195,10 @@ client.on('interactionCreate', async (interaction) => {
     }
   }
 
+  // Tworzenie ticketu
   if (interaction.isButton() && interaction.customId === 'start_ticket') {
-    const selectMenu = new StringSelectMenuBuilder()
-      .setCustomId('select_ticket_type')
-      .setPlaceholder('Wybierz powód zgłoszenia...')
-      .addOptions([
-        { label: '🤝 Fuzja', value: 'Fuzja' }, { label: '🛡️ Sojusz', value: 'Sojusz' },
-        { label: '📝 Rekrutacja', value: 'Rekrutacja' }, { label: '⚙️ Inne', value: 'Inne' }
-      ]);
+    const selectMenu = new StringSelectMenuBuilder().setCustomId('select_ticket_type').setPlaceholder('Powód zgłoszenia...')
+      .addOptions([{ label: '🤝 Fuzja', value: 'Fuzja' }, { label: '🛡️ Sojusz', value: 'Sojusz' }, { label: '📝 Rekrutacja', value: 'Rekrutacja' }, { label: '⚙️ Inne', value: 'Inne' }]);
     await interaction.reply({ content: 'Wybierz kategorię:', components: [new ActionRowBuilder().addComponents(selectMenu)], ephemeral: true });
   }
 
@@ -253,6 +222,7 @@ client.on('interactionCreate', async (interaction) => {
     } catch (err) { console.log(err); }
   }
 
+  // Zamykanie ticketu
   if (interaction.isButton() && interaction.customId === 'close_ticket_request') {
     const reasonMenu = new StringSelectMenuBuilder().setCustomId('select_close_reason').setPlaceholder('Powód zamknięcia...').addOptions([{ label: '✅ Rozwiązane', value: 'Rozwiązane' }, { label: '🤫 Brak kontaktu', value: 'Brak kontaktu' }]);
     await interaction.reply({ content: 'Wybierz powód:', components: [new ActionRowBuilder().addComponents(reasonMenu)] });
