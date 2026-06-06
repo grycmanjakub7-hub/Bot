@@ -1,13 +1,11 @@
-const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, PermissionFlagsBits, AttachmentBuilder, REST, Routes, SlashCommandBuilder, MessageFlags } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, PermissionFlagsBits, AttachmentBuilder, REST, Routes, SlashCommandBuilder } = require('discord.js');
 const express = require('express');
-const axios = require('axios');
 const app = express();
 const port = process.env.PORT || 10000;
 
-app.get('/', (req, res) => { res.send('Bot Husaria dziala 24/7!'); });
-app.listen(port, () => { 
-  console.log(`[SYSTEM] Serwer HTTP nasluchuje na porcie ${port}`);
-});
+// Prosty serwer HTTP aby Render nie wyłączył instancji
+app.get('/', (req, res) => { res.send('Bot Husaria 24/7'); });
+app.listen(port, () => { console.log(`[SYSTEM] Serwer HTTP na porcie ${port}`); });
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers]
@@ -45,42 +43,16 @@ async function updateMemberCountChannel(guild) {
   }
 }
 
-// ANTY-SLEEP SYSTEM DLA RENDERU
-function startAntiSleep() {
-  // Ping co 5 minut (300000ms)
-  setInterval(() => {
-    if (process.env.RENDER_EXTERNAL_HOSTNAME) {
-      const url = `https://${process.env.RENDER_EXTERNAL_HOSTNAME}.onrender.com`;
-      axios.get(url, { timeout: 5000 })
-        .then(() => console.log(`[ANTY-SLEEP] ✅ Pinga${new Date().toLocaleTimeString()}`))
-        .catch((err) => console.log(`[ANTY-SLEEP] ❌ Blad: ${err.message}`));
-    }
-  }, 300000);
-
-  // Alternatywny ping co 10 minut (backup)
-  setInterval(() => {
-    if (process.env.RENDER_EXTERNAL_HOSTNAME) {
-      const url = `https://${process.env.RENDER_EXTERNAL_HOSTNAME}.onrender.com`;
-      axios.get(url, { timeout: 5000 })
-        .then(() => console.log(`[ANTY-SLEEP-BACKUP] ✅ Pinga${new Date().toLocaleTimeString()}`))
-        .catch((err) => console.log(`[ANTY-SLEEP-BACKUP] ❌ Blad: ${err.message}`));
-    }
-  }, 600000);
-
-  console.log('[ANTY-SLEEP] System aktywny! Bot nie bedzie sie wylaczy!');
-}
-
 client.once('ready', async () => {
   console.log(`[SUKCES] Zaawansowany bot Husaria gotowy do akcji!`);
-  
-  // Uruchamiamy anty-sleep system
-  startAntiSleep();
+  console.log(`[BOT] Zalogowany jako: ${client.user.tag}`);
+  console.log(`[BOT] Obsługuję ${client.guilds.cache.size} serwer(ów)`);
   
   const commands = [
     new SlashCommandBuilder()
       .setName('transfer')
-      .setDescription('Oglos oficjalny transfer panstwa do Husarii')
-      .addStringOption(option => option.setName('panstwo').setDescription('Wpisz nazwe panstwa').setRequired(true))
+      .setDescription('Ogłoś oficjalny transfer państwa do Husarii')
+      .addStringOption(option => option.setName('panstwo').setDescription('Wpisz nazwę państwa').setRequired(true))
   ].map(command => command.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
