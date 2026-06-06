@@ -7,13 +7,6 @@ const port = process.env.PORT || 10000;
 app.get('/', (req, res) => { res.send('Bot Husaria dziala 24/7!'); });
 app.listen(port, () => { 
   console.log(`[SYSTEM] Serwer HTTP nasluchuje na porcie ${port}`);
-  setInterval(() => {
-    if (process.env.RENDER_EXTERNAL_HOSTNAME) {
-      axios.get(`https://${process.env.RENDER_EXTERNAL_HOSTNAME}.onrender.com`)
-        .then(() => console.log('[ANTY-SLEEP] Bot pomyslnie szturchniety!'))
-        .catch((err) => console.log('[ANTY-SLEEP] Blad pingu: ' + err.message));
-    }
-  }, 300000);
 });
 
 const client = new Client({
@@ -52,8 +45,36 @@ async function updateMemberCountChannel(guild) {
   }
 }
 
+// ANTY-SLEEP SYSTEM DLA RENDERU
+function startAntiSleep() {
+  // Ping co 5 minut (300000ms)
+  setInterval(() => {
+    if (process.env.RENDER_EXTERNAL_HOSTNAME) {
+      const url = `https://${process.env.RENDER_EXTERNAL_HOSTNAME}.onrender.com`;
+      axios.get(url, { timeout: 5000 })
+        .then(() => console.log(`[ANTY-SLEEP] ✅ Pinga${new Date().toLocaleTimeString()}`))
+        .catch((err) => console.log(`[ANTY-SLEEP] ❌ Blad: ${err.message}`));
+    }
+  }, 300000);
+
+  // Alternatywny ping co 10 minut (backup)
+  setInterval(() => {
+    if (process.env.RENDER_EXTERNAL_HOSTNAME) {
+      const url = `https://${process.env.RENDER_EXTERNAL_HOSTNAME}.onrender.com`;
+      axios.get(url, { timeout: 5000 })
+        .then(() => console.log(`[ANTY-SLEEP-BACKUP] ✅ Pinga${new Date().toLocaleTimeString()}`))
+        .catch((err) => console.log(`[ANTY-SLEEP-BACKUP] ❌ Blad: ${err.message}`));
+    }
+  }, 600000);
+
+  console.log('[ANTY-SLEEP] System aktywny! Bot nie bedzie sie wylaczy!');
+}
+
 client.once('ready', async () => {
   console.log(`[SUKCES] Zaawansowany bot Husaria gotowy do akcji!`);
+  
+  // Uruchamiamy anty-sleep system
+  startAntiSleep();
   
   const commands = [
     new SlashCommandBuilder()
@@ -235,7 +256,7 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isButton() && interaction.customId === 'close_ticket_request') {
     // Sprawdzenie czy użytkownik ma rangę SUPPORT_ROLE_ID
     if (!interaction.member.roles.cache.has(SUPPORT_ROLE_ID)) {
-      return interaction.reply({ content: '❌ Tylko obsługa (ranga ' + SUPPORT_ROLE_ID + ') może zamykać tickety!', ephemeral: true });
+      return interaction.reply({ content: '❌ Tylko obsługa może zamykać tickety!', ephemeral: true });
     }
 
     const menu = new StringSelectMenuBuilder()
