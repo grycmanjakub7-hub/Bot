@@ -1,13 +1,14 @@
 {
   "name": "husaria-bot",
   "version": "1.0.0",
-  "description": "Bot Husaria na Renderze",
+  "description": "Bot dla Husarii",
   "main": "index.js",
+  "dependencies": {
+    "axios": "^1.7.2",
+    "discord.js": "^14.15.3",
+    "express": "^4.19.2"
+  },
   "scripts": {
     "start": "node index.js"
-  },
-  "dependencies": {
-    "discord.js": "^14.14.1",
-    "express": "^4.18.2"
   }
 }
