@@ -1,19 +1,23 @@
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, PermissionFlagsBits, AttachmentBuilder, REST, Routes, SlashCommandBuilder } = require('discord.js');
 const express = require('express');
+const axios = require('axios'); // Nowa biblioteka do pingowania
 const app = express();
 const port = process.env.PORT || 10000;
 
-app.get('/', (req, res) => { res.send('Bot Husaria z systemem weryfikacji i automatycznych rang!'); });
-app.listen(port, () => { console.log(`[SYSTEM] Serwer HTTP nasłuchuje na porcie ${port}`); });
+app.get('/', (req, res) => { res.send('Bot Husaria działa 24/7!'); });
+app.listen(port, () => { 
+  console.log(`[SYSTEM] Serwer HTTP nasłuchuje na porcie ${port}`);
+  
+  // ANTY-ZASYPIACZ: Pinguj bota co 5 minut (300000 ms)
+  setInterval(() => {
+    const url = `https://${process.env.RENDER_EXTERNAL_HOSTNAME}.onrender.com`;
+    if (process.env.RENDER_EXTERNAL_HOSTNAME) {
+      axios.get(url)
+        .then(() => console.log('[ANTY-SLEEP] Bot pomyślnie szturchnięty, nie zasypiam!'))
+        .catch((err) => console.log('[ANTY-SLEEP] Błąd pingu: ' + err.message));
+    }
+  }, 300000);
 
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers 
-  ]
-});
 
 // --- KONFIGURACJA ID ---
 const BYPASS_ROLE_ID = '1512577411315663038'; // Ranga omijająca anty-spam
