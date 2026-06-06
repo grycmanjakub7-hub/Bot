@@ -56,7 +56,10 @@ client.once('ready', async () => {
     if (channel) {
       const messages = await channel.messages.fetch({ limit: 10 });
       if (messages.filter(m => m.author.id === client.user.id).size === 0) {
-        const embed = new EmbedBuilder().setColor('#5865F2').setTitle('🎫 SYSTEM ZGŁOSZEŃ (TICKETS)').setDescription('Potrzebujesz pomocy administracji, chcesz zgłosić fuzję lub sojusz?\nKliknij poniższy przycisk.');
+        const embed = new EmbedBuilder()
+          .setColor('#5865F2')
+          .setTitle('🎫 SYSTEM ZGŁOSZEŃ (TICKETS)')
+          .setDescription('Potrzebujesz pomocy administracji, chcesz zgłosić fuzję lub sojusz?\nKliknij poniższy przycisk, aby otworzyć nowe zgłoszenie.');
         const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('start_ticket').setLabel('Stwórz zgłoszenie').setEmoji('📩').setStyle(ButtonStyle.Primary));
         await channel.send({ embeds: [embed], components: [row] });
       }
@@ -69,9 +72,13 @@ client.once('ready', async () => {
     if (vChannel) {
       const vMessages = await vChannel.messages.fetch({ limit: 10 });
       if (vMessages.filter(m => m.author.id === client.user.id).size === 0) {
-        const vEmbed = new EmbedBuilder().setColor('#2f3136').setTitle('🛡️ WERYFIKACJA BEZPIECZEŃSTWA').setDescription('Aby uzyskać pełny dostęp do serwera, kliknij przycisk i rozwiąż proste zadanie.');
+        const vEmbed = new EmbedBuilder()
+          .setColor('#2f3136')
+          .setTitle('🛡️ WERYFIKACJA BEZPIECZEŃSTWA')
+          .setDescription('Aby uzyskać pełny dostęp do serwera, kliknij przycisk i rozwiąż proste zadanie matematyczne.');
         const vRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('trigger_verify').setLabel('Zweryfikuj się').setEmoji('✅').setStyle(ButtonStyle.Success));
         await vChannel.send({ embeds: [vEmbed], components: [vRow] });
+        console.log('[WERYFIKACJA] Panel weryfikacyjny wysłany.');
       }
     }
   } catch (e) { console.log(e); }
@@ -87,8 +94,8 @@ client.on('guildMemberAdd', async (member) => {
       const welcomeEmbed = new EmbedBuilder()
         .setColor('#2f3136')
         .setAuthor({ name: `Nowy członek osady!`, iconURL: member.guild.iconURL() })
-        .setDescription(`👋 Witaj <@${member.id}> na serwerze **${member.guild.name}**!\nCieszymy się, że do nas dołączasz.`)
-        .addFields({ name: '📊 Użytkownik nr:', value: `\`${member.guild.memberCount}\``, inline: true })
+        .setDescription(`👋 Witaj <@${member.id}> na serwerze **${member.guild.name}**!\nCieszymy się, że do nas dołączasz. Rozgość się!`)
+        .addFields({ name: '📊 Jesteś naszym', value: `\`${member.guild.memberCount}\` użytkownikiem.`, inline: true })
         .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
         .setTimestamp();
       await channel.send({ content: `Witaj <@${member.id}>! ⚔️`, embeds: [welcomeEmbed] });
@@ -116,13 +123,13 @@ client.on('interactionCreate', async (interaction) => {
     const selectMenu = new StringSelectMenuBuilder().setCustomId('submit_verify_answer').setPlaceholder('Wybierz wynik...');
     shuffledAnswers.forEach(ans => { selectMenu.addOptions({ label: `Wynik: ${ans}`, value: ans.toString() }); });
 
-    await interaction.reply({ content: `🔒 **Zadanie:** Ile to jest: **${num1} ${isPlus ? '+' : '-'} ${num2}**?`, components: [new ActionRowBuilder().addComponents(selectMenu)], ephemeral: true });
+    await interaction.reply({ content: `🔒 **Zadanie weryfikacyjne:**\nIle to jest: **${num1} ${isPlus ? '+' : '-'} ${num2}**?`, components: [new ActionRowBuilder().addComponents(selectMenu)], ephemeral: true });
   }
 
   if (interaction.isStringSelectMenu() && interaction.customId === 'submit_verify_answer') {
     const userAnswer = parseInt(interaction.values[0]);
     const correctAnswer = verificationSessions.get(interaction.user.id);
-    if (correctAnswer === undefined) return interaction.reply({ content: '❌ Kliknij przycisk ponownie.', ephemeral: true });
+    if (correctAnswer === undefined) return interaction.reply({ content: '❌ Coś poszło nie tak. Kliknij przycisk weryfikacji ponownie.', ephemeral: true });
 
     if (userAnswer === correctAnswer) {
       try {
@@ -131,29 +138,49 @@ client.on('interactionCreate', async (interaction) => {
         const verifiedRole = interaction.guild.roles.cache.get(VERIFIED_ROLE_ID);
         if (unverifiedRole) await interaction.member.roles.remove(unverifiedRole);
         if (verifiedRole) await interaction.member.roles.add(verifiedRole);
-        await interaction.update({ content: '🎉 **Weryfikacja pomyślna!** Witamy.', components: [], ephemeral: true });
-      } catch (err) { await interaction.reply({ content: '❌ Błąd ról. Przesuń rolę bota wyżej w ustawieniach.', ephemeral: true }); }
+        await interaction.update({ content: '🎉 **Weryfikacja zakończona sukcesem!** Witamy na pełnej wersji serwera Husaria. Uzyskałeś dostęp do kanałów.', components: [], ephemeral: true });
+      } catch (err) { 
+        console.log(err);
+        await interaction.reply({ content: '❌ Bot napotkał problem z rangami. Upewnij się, że rola bota jest nad rangami weryfikacyjnymi.', ephemeral: true }); 
+      }
     } else {
-      await interaction.update({ content: '❌ **Błędny wynik!** Spróbuj ponownie klikając przycisk.', components: [], ephemeral: true });
+      await interaction.update({ content: '❌ **Błędna odpowiedź!** Spróbuj ponownie klikając zielony przycisk na kanale.', components: [], ephemeral: true });
     }
   }
 
   if (interaction.isChatInputCommand() && interaction.commandName === 'transfer') {
-    if (!interaction.member.roles.cache.has(TRANSFER_ALLOWED_ROLE_ID)) return interaction.reply({ content: '❌ Brak uprawnień!', ephemeral: true });
+    if (!interaction.member.roles.cache.has(TRANSFER_ALLOWED_ROLE_ID)) return interaction.reply({ content: '❌ Nie masz uprawnień!', ephemeral: true });
     const panstwo = interaction.options.getString('panstwo');
-    const embed = new EmbedBuilder().setColor('#FF0055').setTitle('✈️ OFICJALNY TRANSFER PAŃSTWA ✈️').setDescription(`Pod skrzydła **Husarii** przechodzi terytorium: **${panstwo}**!`).setTimestamp();
+    const embed = new EmbedBuilder()
+      .setColor('#FF0055')
+      .setTitle('✈️ OFICJALNY TRANSFER PAŃSTWA ✈️')
+      .setDescription(`Z wielką dumą ogłaszamy, że pod skrzydła potężnej **Husarii** oficjalnie przechodzi nowe terytorium!`)
+      .addFields(
+        { name: '🌍 Dołączające Państwo', value: `👑 **${panstwo}**` },
+        { name: '🛡️ Status', value: `🟩 **ZAKOŃCZONY POMYŚLNIE**` }
+      )
+      .setTimestamp()
+      .setFooter({ text: `Ogłoszone przez: ${interaction.user.username}`, iconURL: interaction.user.displayAvatarURL() });
     await interaction.reply({ content: 'Wysyłanie...', ephemeral: true });
     await interaction.channel.send({ embeds: [embed] });
   }
 
   if (interaction.isButton() && interaction.customId === 'start_ticket') {
-    const selectMenu = new StringSelectMenuBuilder().setCustomId('select_ticket_type').setPlaceholder('Powód...')
-      .addOptions([{ label: '🤝 Fuzja', value: 'Fuzja' }, { label: '🛡️ Sojusz', value: 'Sojusz' }, { label: '📝 Rekrutacja', value: 'Rekrutacja' }, { label: '⚙️ Inne', value: 'Inne' }]);
-    await interaction.reply({ content: 'Kategoria:', components: [new ActionRowBuilder().addComponents(selectMenu)], ephemeral: true });
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId('select_ticket_type')
+      .setPlaceholder('Wybierz powód zgłoszenia...')
+      .addOptions([
+        { label: '🤝 Fuzja', value: 'Fuzja' },
+        { label: '🛡️ Sojusz', value: 'Sojusz' },
+        { label: '📝 Rekrutacja', value: 'Rekrutacja' },
+        { label: '⚙️ Inne', value: 'Inne' }
+      ]);
+    await interaction.reply({ content: 'Wybierz kategorię:', components: [new ActionRowBuilder().addComponents(selectMenu)], ephemeral: true });
   }
 
   if (interaction.isStringSelectMenu() && interaction.customId === 'select_ticket_type') {
-    const reason = interaction.values[0]; await interaction.deferUpdate();
+    const reason = interaction.values[0];
+    await interaction.deferUpdate();
     try {
       const ch = await interaction.guild.channels.create({
         name: `ticket-${reason.toLowerCase()}-${interaction.user.username}`,
@@ -165,38 +192,59 @@ client.on('interactionCreate', async (interaction) => {
         ]
       });
       ticketCreators.set(ch.id, interaction.user.id);
-      const ins = new EmbedBuilder().setColor('#5865F2').setTitle(`🎫 Zgłoszenie: ${reason}`).setDescription('Opisz sprawę, administracja zaraz odpowie.');
-      const btn = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('close_ticket_request').setLabel('Zamknij').setEmoji('🔒').setStyle(ButtonStyle.Danger));
+      const ins = new EmbedBuilder()
+        .setColor('#5865F2')
+        .setTitle(`🎫 Zgłoszenie: ${reason}`)
+        .setDescription(`Witaj <@${interaction.user.id}>!\nOpisz sprawę, administracja zaraz odpowie.`);
+      const btn = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('close_ticket_request').setLabel('Zamknij ticket').setEmoji('🔒').setStyle(ButtonStyle.Danger));
       await ch.send({ content: `<@${interaction.user.id}> | <@&${SUPPORT_ROLE_ID}>`, embeds: [ins], components: [btn] });
     } catch (err) { console.log(err); }
   }
 
   if (interaction.isButton() && interaction.customId === 'close_ticket_request') {
-    const menu = new StringSelectMenuBuilder().setCustomId('select_close_reason').setPlaceholder('Powód...').addOptions([{ label: '✅ Rozwiązane', value: 'Rozwiązane' }, { label: '🤫 Brak kontaktu', value: 'Brak kontaktu' }]);
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId('select_close_reason')
+      .setPlaceholder('Powód zamknięcia...')
+      .addOptions([
+        { label: '✅ Rozwiązane', value: 'Rozwiązane' },
+        { label: '🤫 Brak komunikacji', value: 'Brak komunikacji' },
+        { label: '❌ Anulowano', value: 'Anulowano' }
+      ]);
     await interaction.reply({ content: 'Wybierz powód:', components: [new ActionRowBuilder().addComponents(menu)] });
   }
 
   if (interaction.isStringSelectMenu() && interaction.customId === 'select_close_reason') {
-    const reason = interaction.values[0]; const ch = interaction.channel;
-    await interaction.reply('🔒 *Zamykanie (5s)...*');
+    const reason = interaction.values[0];
+    const ch = interaction.channel;
+    await interaction.reply('🔒 *Zamykanie kanału (5 sekund)...*');
     try {
       const msgs = await ch.messages.fetch({ limit: 100 });
       let txt = `--- TRANSKRYPCJA: ${ch.name} ---\n\n`;
       msgs.reverse().forEach(m => { if(!m.author.bot) txt += `${m.author.tag}: ${m.content}\n`; });
+      const attachment = new AttachmentBuilder(Buffer.from(txt, 'utf-8'), { name: `transcript-${ch.id}.txt` });
       const cr = await client.users.fetch(ticketCreators.get(ch.id) || '').catch(() => null);
-      if (cr) await cr.send({ embeds: [new EmbedBuilder().setColor('#FAA61A').setTitle('📥 TICKET ZAMKNIĘTY').addFields({ name: 'Powód', value: reason })], files: [new AttachmentBuilder(Buffer.from(txt, 'utf-8'), { name: `transcript-${ch.id}.txt` })] }).catch(() => {});
+      if (cr) {
+        await cr.send({
+          embeds: [new EmbedBuilder().setColor('#FAA61A').setTitle('📥 TICKET ZAMKNIĘTY').addFields({ name: '📝 Powód', value: `\`${reason}\`` })],
+          files: [attachment]
+        }).catch(() => {});
+      }
       setTimeout(async () => { ticketCreators.delete(ch.id); await ch.delete().catch(() => {}); }, 5000);
     } catch (err) { console.log(err); }
   }
 });
 
 client.on('messageCreate', async (message) => {
-  if (message.author.bot || !message.guild || (message.member && message.member.roles.cache.has(BYPASS_ROLE_ID))) return;
-  const uid = message.author.id; const now = Date.now();
+  if (message.author.bot || !message.guild) return;
+  if (message.member && message.member.roles.cache.has(BYPASS_ROLE_ID)) return;
+  
+  const uid = message.author.id;
+  const now = Date.now();
   if (!userLog.has(uid)) userLog.set(uid, []);
   const ts = userLog.get(uid);
   while (ts.length > 0 && now - ts[0] > 4000) { ts.shift(); }
   ts.push(now);
+  
   if (ts.length > 3) {
     try {
       await message.delete().catch(() => {});
@@ -208,5 +256,8 @@ client.on('messageCreate', async (message) => {
     } catch (e) { console.log(e); }
   }
 });
+
+client.on('error', err => console.error('[ERROR]:', err));
+client.on('warn', info => console.warn('[WARN]:', info));
 
 client.login(process.env.DISCORD_TOKEN);
