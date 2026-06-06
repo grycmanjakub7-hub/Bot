@@ -202,6 +202,11 @@ client.on('interactionCreate', async (interaction) => {
   }
 
   if (interaction.isButton() && interaction.customId === 'close_ticket_request') {
+    // Sprawdzenie czy użytkownik ma rangę SUPPORT_ROLE_ID
+    if (!interaction.member.roles.cache.has(SUPPORT_ROLE_ID)) {
+      return interaction.reply({ content: '❌ Tylko obsługa (ranga ' + SUPPORT_ROLE_ID + ') może zamykać tickety!', ephemeral: true });
+    }
+
     const menu = new StringSelectMenuBuilder()
       .setCustomId('select_close_reason')
       .setPlaceholder('Powód zamknięcia...')
@@ -214,6 +219,11 @@ client.on('interactionCreate', async (interaction) => {
   }
 
   if (interaction.isStringSelectMenu() && interaction.customId === 'select_close_reason') {
+    // Dodatkowe sprawdzenie uprawnień
+    if (!interaction.member.roles.cache.has(SUPPORT_ROLE_ID)) {
+      return interaction.reply({ content: '❌ Tylko obsługa może zamykać tickety!', ephemeral: true });
+    }
+
     const reason = interaction.values[0];
     const ch = interaction.channel;
     await interaction.reply('🔒 *Zamykanie kanału (5 sekund)...*');
