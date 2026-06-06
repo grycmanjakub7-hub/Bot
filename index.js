@@ -172,11 +172,26 @@ client.on('interactionCreate', async (interaction) => {
   }
 
   if (interaction.isButton() && interaction.customId === 'close_ticket_request') {
+    const creatorId = ticketCreators.get(interaction.channel.id);
+    const hasSupportRole = interaction.member.roles.cache.has(SUPPORT_ROLE_ID);
+
+    // Sprawdzenie uprawnień: tylko autor zgłoszenia LUB osoba z rangą supportu
+    if (interaction.user.id !== creatorId && !hasSupportRole) {
+      return interaction.reply({ content: '❌ Tylko twórca zgłoszenia lub administracja (Support) może zamknąć ten ticket!', ephemeral: true });
+    }
+
     const menu = new StringSelectMenuBuilder().setCustomId('select_close_reason').setPlaceholder('Powod...').addOptions([{ label: '✅ Rozwiazane', value: 'Rozwiazane' }, { label: '🤫 Brak kontaktu', value: 'Brak kontaktu' }]);
     await interaction.reply({ content: 'Wybierz powod:', components: [new ActionRowBuilder().addComponents(menu)] });
   }
 
   if (interaction.isStringSelectMenu() && interaction.customId === 'select_close_reason') {
+    const creatorId = ticketCreators.get(interaction.channel.id);
+    const hasSupportRole = interaction.member.roles.cache.has(SUPPORT_ROLE_ID);
+
+    if (interaction.user.id !== creatorId && !hasSupportRole) {
+      return interaction.reply({ content: '❌ Brak uprawnień do zamknięcia zgłoszenia.', ephemeral: true });
+    }
+
     const reason = interaction.values[0]; const ch = interaction.channel;
     await interaction.reply('🔒 *Zamykanie (5s)...*');
     try {
@@ -202,7 +217,7 @@ client.on('messageCreate', async (message) => {
       await message.delete().catch(() => {});
       if (message.member && message.member.moderatable) {
         await message.member.timeout(5 * 60 * 1000, 'Spam');
-        const warn = await message.channel.send(`⛔ <@${uid}> otrzymal przerwe za spam.`);
+        const warn = await message.channel.send(`⛔ <@${uid}> otrzymał przerwę za spam.`);
         setTimeout(() => warn.delete().catch(() => {}), 7000);
       }
     } catch (e) { console.log(e); }
