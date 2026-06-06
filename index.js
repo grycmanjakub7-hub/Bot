@@ -29,10 +29,28 @@ const WELCOME_CHANNEL_ID = '1512410099518410782';
 const VERIFY_CHANNEL_ID = '1512591912450920558';
 const AUTOROLE_ON_JOIN_ID = '1512592026900627487';
 const VERIFIED_ROLE_ID = '1512580404974981120';
+const MEMBER_COUNT_CHANNEL_ID = '1512409967892762706';
 
 const userLog = new Map();
 const ticketCreators = new Map();
 const verificationSessions = new Map();
+
+// Funkcja aktualizujaca nazwe kanalu glosowego z liczba czlonkow
+async function updateMemberCountChannel(guild) {
+  try {
+    const channel = await guild.channels.fetch(MEMBER_COUNT_CHANNEL_ID);
+    if (channel && channel.isVoiceBased()) {
+      const memberCount = guild.memberCount;
+      const newName = `〔👥〕・ludzie ${memberCount}`;
+      if (channel.name !== newName) {
+        await channel.setName(newName);
+        console.log(`[LICZBA OSOB] Zaktualizowano nazwe kanalu: ${newName}`);
+      }
+    }
+  } catch (error) {
+    console.log(`[BLAD KANALU CZLONKOW]: ${error.message}`);
+  }
+}
 
 client.once('ready', async () => {
   console.log(`[SUKCES] Zaawansowany bot Husaria gotowy do akcji!`);
@@ -82,6 +100,11 @@ client.once('ready', async () => {
       }
     }
   } catch (e) { console.log(e); }
+
+  // Pierwsza aktualizacja liczby czlonkow
+  for (const guild of client.guilds.cache.values()) {
+    await updateMemberCountChannel(guild);
+  }
 });
 
 client.on('guildMemberAdd', async (member) => {
@@ -101,6 +124,14 @@ client.on('guildMemberAdd', async (member) => {
       await channel.send({ content: `Witaj <@${member.id}>! ⚔️`, embeds: [welcomeEmbed] });
     }
   } catch (error) { console.log(error); }
+
+  // Aktualizacja liczby czlonkow na kanale
+  await updateMemberCountChannel(member.guild);
+});
+
+client.on('guildMemberRemove', async (member) => {
+  // Aktualizacja liczby czlonkow na kanale
+  await updateMemberCountChannel(member.guild);
 });
 
 client.on('interactionCreate', async (interaction) => {
